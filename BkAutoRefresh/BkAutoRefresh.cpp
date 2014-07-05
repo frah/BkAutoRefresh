@@ -156,22 +156,29 @@ int WINAPI BKC_OnOpenCompose(HWND hWnd, int nMode/* See COMPOSE_MODE_* in BeckyA
 {
 	LPSTR text, newTxt;
 	char mimeType[80], *ctx, *line;
-	int textLen;
+	int textLen, ntextLen;
 	bool snipFlag = false;
-	const char *delim = "\r\n";
+	const char *delim = "\r";
 
 	if ((nMode == COMPOSE_MODE_REPLY1) ||
 		(nMode == COMPOSE_MODE_REPLY2) ||
 		(nMode == COMPOSE_MODE_REPLY3)) {
 			text = bka.CompGetText(hWnd, mimeType, sizeof(mimeType));
-
+#ifdef _DEBUG
+			MessageBox(hWnd, text, "BkAutoRefresh", MB_OK);
+#endif
 			if (strcmp(mimeType, "text/plain") != 0) return 0;
 
 			textLen = strlen(text);
-			newTxt = (LPSTR)bka.Alloc(sizeof(char) * textLen);
+			ntextLen = textLen + 100;
+			newTxt = (LPSTR)bka.Alloc(sizeof(char) * ntextLen);
+			memset(newTxt, '\0', ntextLen);
 
 			line = strtok_s(text, delim, &ctx);
+			strcat_s(newTxt, ntextLen, "\r\n");
 			while (line) {
+				if (*line == '\n') line++;
+
 				if ((strlen(line) > 0) && (line[0] == RFC2646_QUOTE_INDICATOR)) {
 					if (ends_with(line, RFC2646_SIGNATURE_SEPARATOR)) {
 						snipFlag = true;
@@ -181,13 +188,16 @@ int WINAPI BKC_OnOpenCompose(HWND hWnd, int nMode/* See COMPOSE_MODE_* in BeckyA
 				}
 
 				if (!snipFlag) {
-					strcat_s(newTxt, textLen, line);
-					strcat_s(newTxt, textLen, delim);
+					strcat_s(newTxt, ntextLen, line);
+					strcat_s(newTxt, ntextLen, "\r\n");
 				}
 
 				line = strtok_s(NULL, delim, &ctx);
 			}
 
+#ifdef _DEBUG
+			MessageBox(hWnd, newTxt, "BkAutoRefresh", MB_OK);
+#endif
 			bka.CompSetText(hWnd, 0, newTxt);
 
 			bka.Free(text);
@@ -395,6 +405,12 @@ bool ends_with(const char* src, const char* val) {
 
 	srcLen = strlen(src);
 	valLen = strlen(val);
+
+#ifdef _DEBUG
+	char buf[256];
+	sprintf_s(buf, sizeof(buf), "src: \"%s\"\nsrcLen: %d\nval: \"%s\"\nvalLen: %d\n", src, srcLen, val, valLen);
+	MessageBox(NULL, buf, "BkAutoRefresh", MB_OK);
+#endif
 
 	return ((srcLen >= valLen) && (strncmp(src + srcLen - valLen, val, valLen) == 0));
 }
