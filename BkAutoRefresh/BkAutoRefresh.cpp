@@ -11,7 +11,73 @@ CBeckyAPI bka; // You can have only one instance in a project.
 
 HINSTANCE g_hInstance = NULL;
 
+BOOL g_enableRefresh = TRUE;
+BOOL g_enableQuote = TRUE;
+
 char szIni[_MAX_PATH+2]; // Ini file to save your plugin settings.
+
+
+////////////////////////////////////////////////////////////////////////////
+// Original functions
+int strcount(const char* str, const char c) {
+	int count = 0;
+	while (*str != '\0') {
+		if (*str == c) count++;
+		str++;
+	}
+	return count;
+}
+
+bool ends_with(const char* src, const char* val) {
+	int srcLen, valLen;
+
+	srcLen = strlen(src);
+	valLen = strlen(val);
+
+#ifdef _DEBUG
+	char buf[256];
+	sprintf_s(buf, sizeof(buf), "src: \"%s\"\nsrcLen: %d\nval: \"%s\"\nvalLen: %d\n", src, srcLen, val, valLen);
+	MessageBox(NULL, buf, "BkAutoRefresh", MB_OK);
+#endif
+
+	return ((srcLen >= valLen) && (strncmp(src + srcLen - valLen, val, valLen) == 0));
+}
+
+////////////////////////////////////////////////////////////////////////////
+// Dialog procs
+BOOL CALLBACK SetupProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+	switch (msg){
+	case WM_COMMAND:
+		if (LOWORD(wParam) == IDOK) {
+			g_enableRefresh = ((SendDlgItemMessage(hWnd, IDC_CHK_REFRESH, BM_GETCHECK, 0, 0) == BST_CHECKED)? TRUE:FALSE);
+			g_enableQuote = ((SendDlgItemMessage(hWnd, IDC_CHK_QUOTE, BM_GETCHECK, 0, 0) == BST_CHECKED)? TRUE:FALSE);
+
+			char szVal[60];
+			sprintf(szVal, "%d", g_enableRefresh);
+			WritePrivateProfileString("Settings", "EnableRefresh", szVal, szIni);
+			sprintf(szVal, "%d", g_enableQuote);
+			WritePrivateProfileString("Settings", "EnableQuote", szVal, szIni);
+			EndDialog(hWnd, IDOK);
+			return TRUE;
+		} else
+		if (LOWORD(wParam) == IDCANCEL) {
+			EndDialog(hWnd, IDCANCEL);
+			return TRUE;
+		}
+		break;
+
+	case WM_INITDIALOG:
+		SendDlgItemMessage(hWnd, IDC_CHK_REFRESH, BM_SETCHECK, g_enableRefresh, 0);
+		SendDlgItemMessage(hWnd, IDC_CHK_QUOTE, BM_SETCHECK, g_enableQuote, 0);
+		return TRUE;
+
+	default:
+		break;
+	}
+	return FALSE;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 // DLL entry point
@@ -36,6 +102,8 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 					// just in case
 					strcat(szIni, ".ini");
 				}
+				g_enableRefresh = GetPrivateProfileInt("Settings", "EnableRefresh", TRUE, szIni);
+				g_enableQuote = GetPrivateProfileInt("Settings", "EnableQuote", TRUE, szIni);
 			}
 			break;
 		case DLL_THREAD_ATTACH:
@@ -125,6 +193,8 @@ int WINAPI BKC_OnOpenFolder(LPCTSTR lpFolderID)
 {
 	HWND hwnd[4] = {};
 
+	if (!g_enableRefresh) return 0;
+
 	if (strcount(lpFolderID, '\\') == 1) {
 		bka.GetWindowHandles(&hwnd[0], &hwnd[1], &hwnd[2], &hwnd[3]);
 		//SendNotifyMessage(hwnd, WM_KEYDOWN, VK_F5, 1);
@@ -158,7 +228,10 @@ int WINAPI BKC_OnOpenCompose(HWND hWnd, int nMode/* See COMPOSE_MODE_* in BeckyA
 	char mimeType[80], *ctx, *line;
 	int textLen, ntextLen;
 	bool snipFlag = false;
+	const char *newLine = "\r\n";
 	const char *delim = "\r";
+
+	if (!g_enableQuote) return 0;
 
 	if ((nMode == COMPOSE_MODE_REPLY1) ||
 		(nMode == COMPOSE_MODE_REPLY2) ||
@@ -170,12 +243,12 @@ int WINAPI BKC_OnOpenCompose(HWND hWnd, int nMode/* See COMPOSE_MODE_* in BeckyA
 			if (strcmp(mimeType, "text/plain") != 0) return 0;
 
 			textLen = strlen(text);
-			ntextLen = textLen + 100;
+			ntextLen = textLen + (textLen / 2);
 			newTxt = (LPSTR)bka.Alloc(sizeof(char) * ntextLen);
 			memset(newTxt, '\0', ntextLen);
 
 			line = strtok_s(text, delim, &ctx);
-			strcat_s(newTxt, ntextLen, "\r\n");
+			strcat_s(newTxt, ntextLen, newLine);
 			while (line) {
 				if (*line == '\n') line++;
 
@@ -189,7 +262,7 @@ int WINAPI BKC_OnOpenCompose(HWND hWnd, int nMode/* See COMPOSE_MODE_* in BeckyA
 
 				if (!snipFlag) {
 					strcat_s(newTxt, ntextLen, line);
-					strcat_s(newTxt, ntextLen, "\r\n");
+					strcat_s(newTxt, ntextLen, newLine);
 				}
 
 				line = strtok_s(NULL, delim, &ctx);
@@ -257,7 +330,7 @@ int WINAPI BKC_OnFinishRetrieve(int nNumber/* Number of messages*/)
 	LPCSTR curFolder;
 	HWND hwnd[4] = {};
 
-	if (nNumber == 0) return 0;
+	if (nNumber == 0 || !g_enableRefresh) return 0;
 	curFolder = bka.GetCurrentFolder();
 	if (strcount(curFolder, '\\') == 1) {
 		bka.GetWindowHandles(&hwnd[0], &hwnd[1], &hwnd[2], &hwnd[3]);
@@ -273,9 +346,10 @@ int WINAPI BKC_OnFinishRetrieve(int nNumber/* Number of messages*/)
 // Called when plug-in setup is needed.
 int WINAPI BKC_OnPlugInSetup(HWND hWnd)
 {
+	int nRC = DialogBox(g_hInstance, MAKEINTRESOURCE(IDD_SETTINGS), hWnd, (DLGPROC)SetupProc);
 	// Return nonzero if you have processed.
 	// return 1;
-	return 0;
+	return 1;
 }
 
 
@@ -387,32 +461,6 @@ int WINAPI BKC_OnBeforeFilter2(LPCSTR lpMessage, LPCSTR lpMailBox, int* lpnActio
 	BKC_FILTER_NEXT		Request Becky! to call this callback again so that another rules can be added.
 	*/
     return BKC_FILTER_DEFAULT;
-}
-
-
-
-int strcount(const char* str, const char c) {
-	int count = 0;
-	while (*str != '\0') {
-		if (*str == c) count++;
-		str++;
-	}
-	return count;
-}
-
-bool ends_with(const char* src, const char* val) {
-	int srcLen, valLen;
-
-	srcLen = strlen(src);
-	valLen = strlen(val);
-
-#ifdef _DEBUG
-	char buf[256];
-	sprintf_s(buf, sizeof(buf), "src: \"%s\"\nsrcLen: %d\nval: \"%s\"\nvalLen: %d\n", src, srcLen, val, valLen);
-	MessageBox(NULL, buf, "BkAutoRefresh", MB_OK);
-#endif
-
-	return ((srcLen >= valLen) && (strncmp(src + srcLen - valLen, val, valLen) == 0));
 }
 
 #ifdef __cplusplus
