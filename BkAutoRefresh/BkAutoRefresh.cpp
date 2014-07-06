@@ -21,9 +21,8 @@ char szIni[_MAX_PATH+2]; // Ini file to save your plugin settings.
 // Original functions
 int strcount(const char* str, const char c) {
 	int count = 0;
-	while (*str != '\0') {
+	for (;*str != '\0'; str++) {
 		if (*str == c) count++;
-		str++;
 	}
 	return count;
 }
@@ -198,7 +197,7 @@ int WINAPI BKC_OnOpenFolder(LPCTSTR lpFolderID)
 	if (strcount(lpFolderID, '\\') == 1) {
 		bka.GetWindowHandles(&hwnd[0], &hwnd[1], &hwnd[2], &hwnd[3]);
 		//SendNotifyMessage(hwnd, WM_KEYDOWN, VK_F5, 1);
-		PostMessage(hwnd[0], WM_COMMAND, 32998, NULL);
+		PostMessage(hwnd[0], WM_COMMAND, BK_COMMAND_RELOAD_QUERY, NULL);
 	}
 	// Always return 0.
 	return 0;
@@ -335,7 +334,7 @@ int WINAPI BKC_OnFinishRetrieve(int nNumber/* Number of messages*/)
 	if (strcount(curFolder, '\\') == 1) {
 		bka.GetWindowHandles(&hwnd[0], &hwnd[1], &hwnd[2], &hwnd[3]);
 		//SendNotifyMessage(hwnd, WM_KEYDOWN, VK_F5, 1);
-		PostMessage(hwnd[0], WM_COMMAND, 32998, NULL);
+		PostMessage(hwnd[0], WM_COMMAND, BK_COMMAND_RELOAD_QUERY, NULL);
 	}
 	// Always return 0.
 	return 0;
