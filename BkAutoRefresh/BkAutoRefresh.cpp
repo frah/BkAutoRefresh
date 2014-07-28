@@ -239,7 +239,10 @@ int WINAPI BKC_OnOpenCompose(HWND hWnd, int nMode/* See COMPOSE_MODE_* in BeckyA
 #ifdef _DEBUG
 			MessageBox(hWnd, text, "BkAutoRefresh", MB_OK);
 #endif
-			if (strcmp(mimeType, "text/plain") != 0) return 0;
+			if (strcmp(mimeType, "text/plain") != 0) {
+				bka.Free(text);
+				return 0;
+			}
 
 			textLen = strlen(text);
 			ntextLen = textLen + (textLen / 2);
@@ -372,7 +375,7 @@ int WINAPI BKC_OnPlugInInfo(LPBKPLUGININFO lpPlugInInfo)
 	strcpy(lpPlugInInfo->szPlugInName, buf);
 	LoadString(g_hInstance, IDS_BAR_VENDOR, buf, sizeof(buf));
 	strcpy(lpPlugInInfo->szVendor, buf);
-	strcpy(lpPlugInInfo->szVersion, "2.0");
+	strcpy(lpPlugInInfo->szVersion, "2.1");
 	LoadString(g_hInstance, IDS_BAR_DESC, buf, sizeof(buf));
 	strcpy(lpPlugInInfo->szDescription, buf);
 	
