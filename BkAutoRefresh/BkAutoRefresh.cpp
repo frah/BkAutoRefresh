@@ -5,11 +5,15 @@
 #include "BkAutoRefresh.h"
 #include "BeckyAPI.h"
 #include "BkCommon.h"
+#include "bregexp\BREGEXP.H"
+
+#pragma comment(lib, "bregexp\\BREGEXP.LIB")
 
 
 CBeckyAPI bka; // You can have only one instance in a project.
 
 HINSTANCE g_hInstance = NULL;
+HHOOK g_mhhk = NULL;
 
 BOOL g_enableRefresh = TRUE;
 BOOL g_enableQuote = TRUE;
@@ -77,6 +81,67 @@ BOOL CALLBACK SetupProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	return FALSE;
 }
 
+////////////////////////////////////////////////////////////////////////////
+// Hook procs
+LRESULT CALLBACK LDoubleClickHookProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+	MOUSEHOOKSTRUCT *pmh;
+	HGLOBAL hg;
+	PTSTR strText = NULL, strClip = NULL, strSel = NULL;
+
+	pmh = (MOUSEHOOKSTRUCT *)lParam;
+
+	if (nCode == HC_ACTION && wParam == WM_LBUTTONDBLCLK) {
+		char buf[256];
+		GetClassName(pmh->hwnd, buf, sizeof(buf));
+		if (strcmp(buf, "DanaEditWindowClass") == 0) {
+			// backup clipboard
+			if (IsClipboardFormatAvailable(CF_TEXT)) {
+				if (OpenClipboard(NULL) && (hg = GetClipboardData(CF_TEXT))) {
+					strText = (PTSTR)bka.Alloc(GlobalSize(hg));
+					strClip = (PTSTR)GlobalLock(hg);
+					lstrcpy(strText, strClip);
+
+					GlobalUnlock(hg);
+					EmptyClipboard();
+					CloseClipboard();
+				}
+			}
+
+			PostMessage(pmh->hwnd, WM_COMMAND, 57634, NULL); //0x0000E122
+			if (IsClipboardFormatAvailable(CF_TEXT)) {
+				if (OpenClipboard(NULL) && (hg = GetClipboardData(CF_TEXT))) {
+					strSel = (PTSTR)bka.Alloc(GlobalSize(hg));
+					strClip = (PTSTR)GlobalLock(hg);
+					lstrcpy(strSel, strClip);
+					GlobalUnlock(hg);
+					CloseClipboard();
+
+					MessageBox(pmh->hwnd, strSel, "BkAutoRefresh", MB_OK);
+					bka.Free(strSel);
+				}
+			}
+
+			// restore clipboard
+			if (strText != NULL) {
+				if (OpenClipboard(NULL)) {
+					EmptyClipboard();
+
+					hg = GlobalAlloc(GHND | GMEM_SHARE, strlen(strText));
+					strClip = (PTSTR)GlobalLock(hg);
+					lstrcpy(strClip, strText);
+					GlobalUnlock(hg);
+
+					SetClipboardData(CF_TEXT, hg);
+					CloseClipboard();
+				}
+				bka.Free(strText);
+			}
+		}
+	}
+
+	return CallNextHookEx(g_mhhk, nCode, wParam, lParam);
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // DLL entry point
@@ -132,6 +197,12 @@ int WINAPI BKC_OnStart()
 	before BKC_OnStart. So, do not assume BKC_OnStart is called
 	prior to any other callback.
 	*/
+
+	g_mhhk = SetWindowsHookEx(WH_MOUSE, (HOOKPROC)LDoubleClickHookProc, g_hInstance, NULL);
+	if (g_mhhk == NULL) {
+		MessageBox(NULL, "Hooking mouse message failed!", "BkAutoRefresh", MB_OK | MB_ICONERROR);
+	}
+
 	// Always return 0.
 	return 0;
 }
@@ -140,6 +211,7 @@ int WINAPI BKC_OnStart()
 // Called when the main window is closing.
 int WINAPI BKC_OnExit()
 {
+	UnhookWindowsHookEx(g_mhhk);
 	// Return -1 if you don't want to quit.
 	return 0;
 }

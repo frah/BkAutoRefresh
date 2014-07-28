@@ -36,6 +36,9 @@
     <ClInclude Include="resource.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
+    <ClInclude Include="bregexp\BREGEXP.H">
+      <Filter>ヘッダー ファイル</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -55,6 +58,7 @@
     <None Include="BkAutoRefresh.def">
       <Filter>ソース ファイル</Filter>
     </None>
+    <None Include="bregexp\BREGEXP.DLL" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="BkAutoRefresh.rc">

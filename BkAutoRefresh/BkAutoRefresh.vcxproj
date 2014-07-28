@@ -87,6 +87,7 @@
     <ClInclude Include="BeckyApi.h" />
     <ClInclude Include="BkAutoRefresh.h" />
     <ClInclude Include="BkCommon.h" />
+    <ClInclude Include="bregexp\BREGEXP.H" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
@@ -102,6 +103,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="BkAutoRefresh.def" />
+    <None Include="bregexp\BREGEXP.DLL" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="BkAutoRefresh.rc" />
