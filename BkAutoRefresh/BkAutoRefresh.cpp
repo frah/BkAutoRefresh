@@ -142,6 +142,21 @@ LRESULT CALLBACK LDoubleClickHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 
 	return CallNextHookEx(g_mhhk, nCode, wParam, lParam);
 }
+void EnableHook()
+{
+	if (g_mhhk != NULL) return;
+
+	g_mhhk = SetWindowsHookEx(WH_MOUSE, (HOOKPROC)LDoubleClickHookProc, g_hInstance, NULL);
+	if (g_mhhk == NULL) {
+		MessageBox(NULL, "Hooking mouse message failed!", "BkAutoRefresh", MB_OK | MB_ICONERROR);
+	}
+}
+void DisableHook()
+{
+	if (g_mhhk != NULL) {
+		UnhookWindowsHookEx(g_mhhk);
+	}
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // DLL entry point
@@ -198,10 +213,7 @@ int WINAPI BKC_OnStart()
 	prior to any other callback.
 	*/
 
-	g_mhhk = SetWindowsHookEx(WH_MOUSE, (HOOKPROC)LDoubleClickHookProc, g_hInstance, NULL);
-	if (g_mhhk == NULL) {
-		MessageBox(NULL, "Hooking mouse message failed!", "BkAutoRefresh", MB_OK | MB_ICONERROR);
-	}
+	EnableHook();
 
 	// Always return 0.
 	return 0;
@@ -211,7 +223,7 @@ int WINAPI BKC_OnStart()
 // Called when the main window is closing.
 int WINAPI BKC_OnExit()
 {
-	UnhookWindowsHookEx(g_mhhk);
+	DisableHook();
 	// Return -1 if you don't want to quit.
 	return 0;
 }
