@@ -43,7 +43,7 @@ bool ends_with(const char* src, const char* val) {
 #ifdef _DEBUG
 	char buf[256];
 	sprintf_s(buf, sizeof(buf), "src: \"%s\"\nsrcLen: %d\nval: \"%s\"\nvalLen: %d\n", src, srcLen, val, valLen);
-	MessageBox(NULL, buf, "BkAutoRefresh", MB_OK);
+	MessageBox(NULL, buf, PLUGIN_NAME, MB_OK);
 #endif
 
 	return ((srcLen >= valLen) && (strncmp(src + srcLen - valLen, val, valLen) == 0));
@@ -55,7 +55,7 @@ void send_event(WORD type, DWORD eventId, const char* message)
 		ReportEvent(g_hEvent, type, 0, eventId, NULL, 1, 0, &message, NULL);
 	} else {
 		if (type == EVENTLOG_ERROR_TYPE) {
-			MessageBox(NULL, message, "BkAutoRefresh", MB_OK || MB_ICONERROR);
+			MessageBox(NULL, message, PLUGIN_NAME, MB_OK || MB_ICONERROR);
 		}
 	}
 }
@@ -97,10 +97,13 @@ BOOL CALLBACK SetupProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 ////////////////////////////////////////////////////////////////////////////
 // Hook procs
-VOID CALLBACK CopySendAsyncProc(HWND hwnd, UINT uMsg, ULONG_PTR uData, LRESULT lResult)
+DWORD WINAPI DoubleClickOperateThread(LPVOID lpParam)
 {
 	HGLOBAL hg;
 	PTSTR strClip = NULL, strSel = NULL;
+
+	Sleep(500);
+	SendMessage((HWND)lpParam, WM_COMMAND, BK_COMMAND_COPY, NULL);
 
 	if (IsClipboardFormatAvailable(CF_TEXT)) {
 		if (OpenClipboard(NULL) && (hg = GetClipboardData(CF_TEXT))) {
@@ -131,17 +134,18 @@ VOID CALLBACK CopySendAsyncProc(HWND hwnd, UINT uMsg, ULONG_PTR uData, LRESULT l
 		}
 		bka.Free(g_clipText);
 	}
+
+	ExitThread(TRUE);
 }
 LRESULT CALLBACK LDoubleClickHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
 	MOUSEHOOKSTRUCT *pmh;
 	HGLOBAL hg;
 	PTSTR strClip = NULL, strSel = NULL;
-	LRESULT ret = NULL;
+	DWORD dwId;
 
 	pmh = (MOUSEHOOKSTRUCT *)lParam;
 
-	ret = CallNextHookEx(g_mhhk, nCode, wParam, lParam);
 	if (nCode == HC_ACTION && wParam == WM_LBUTTONDBLCLK) {
 		char buf[256];
 		GetClassName(pmh->hwnd, buf, sizeof(buf));
@@ -161,11 +165,11 @@ LRESULT CALLBACK LDoubleClickHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 				}
 			}
 
-			SendMessageCallback(pmh->hwnd, WM_COMMAND, 57634, NULL, CopySendAsyncProc, NULL);
+			CreateThread(NULL, 0, DoubleClickOperateThread, (LPVOID)pmh->hwnd, 0, &dwId);
 		}
 	}
 
-	return ret;
+	return CallNextHookEx(g_mhhk, nCode, wParam, lParam);
 }
 void EnableHook()
 {
@@ -173,7 +177,7 @@ void EnableHook()
 
 	g_mhhk = SetWindowsHookEx(WH_MOUSE, (HOOKPROC)LDoubleClickHookProc, g_hInstance, NULL);
 	if (g_mhhk == NULL) {
-		MessageBox(NULL, "Hooking mouse message failed!", "BkAutoRefresh", MB_OK | MB_ICONERROR);
+		MessageBox(NULL, "Hooking mouse message failed!", PLUGIN_NAME, MB_OK | MB_ICONERROR);
 	}
 }
 void DisableHook()
@@ -199,9 +203,9 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 				if (!bka.InitAPI()) {
 					return FALSE;
 				}
-				g_hEvent = RegisterEventSource(NULL, "BkAutoRefresh");
+				g_hEvent = RegisterEventSource(NULL, PLUGIN_NAME);
 				if (g_hEvent == NULL) {
-					MessageBox(NULL, "Cannot open Event Handle!", "BkAutoRefresh", MB_OK);
+					MessageBox(NULL, "Cannot open Event Handle!", PLUGIN_NAME, MB_OK || MB_ICONERROR);
 				}
 				GetModuleFileName((HINSTANCE)hModule, szIni, _MAX_PATH);
 				LPSTR lpExt = strrchr(szIni, '.');
@@ -356,7 +360,7 @@ int WINAPI BKC_OnOpenCompose(HWND hWnd, int nMode/* See COMPOSE_MODE_* in BeckyA
 		(nMode == COMPOSE_MODE_REPLY3)) {
 			text = bka.CompGetText(hWnd, mimeType, sizeof(mimeType));
 #ifdef _DEBUG
-			MessageBox(hWnd, text, "BkAutoRefresh", MB_OK);
+			MessageBox(hWnd, text, PLUGIN_NAME, MB_OK);
 #endif
 			if (strcmp(mimeType, "text/plain") != 0) return 0;
 
@@ -387,7 +391,7 @@ int WINAPI BKC_OnOpenCompose(HWND hWnd, int nMode/* See COMPOSE_MODE_* in BeckyA
 			}
 
 #ifdef _DEBUG
-			MessageBox(hWnd, newTxt, "BkAutoRefresh", MB_OK);
+			MessageBox(hWnd, newTxt, PLUGIN_NAME, MB_OK);
 #endif
 			bka.CompSetText(hWnd, 0, newTxt);
 
