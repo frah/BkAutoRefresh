@@ -79,6 +79,11 @@
       <OptimizeReferences>true</OptimizeReferences>
       <ModuleDefinitionFile>BkAutoRefresh.def</ModuleDefinitionFile>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /y /r "$(ProjectDir)bregonig\*.dll" "$(TargetDir)"
+xcopy /y /r "$(ProjectDir)bregonig\*.txt" "$(TargetDir)"
+xcopy /y /r "$(ProjectDir)ReadMe.txt" "$(TargetDir)"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <Text Include="ReadMe.txt" />
@@ -87,7 +92,7 @@
     <ClInclude Include="BeckyApi.h" />
     <ClInclude Include="BkAutoRefresh.h" />
     <ClInclude Include="BkCommon.h" />
-    <ClInclude Include="bregexp\BREGEXP.H" />
+    <ClInclude Include="bregonig\bregexp.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
@@ -103,7 +108,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="BkAutoRefresh.def" />
-    <None Include="bregexp\BREGEXP.DLL" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="BkAutoRefresh.rc" />

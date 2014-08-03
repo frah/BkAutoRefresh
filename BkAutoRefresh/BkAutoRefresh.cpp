@@ -5,9 +5,9 @@
 #include "BkAutoRefresh.h"
 #include "BeckyAPI.h"
 #include "BkCommon.h"
-#include "bregexp\BREGEXP.H"
+#include "bregonig\bregexp.h"
 
-#pragma comment(lib, "bregexp\\BREGEXP.LIB")
+#pragma comment(lib, "bregonig\\bregonig.lib")
 
 
 CBeckyAPI bka; // You can have only one instance in a project.
