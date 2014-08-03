@@ -13,10 +13,13 @@
 CBeckyAPI bka; // You can have only one instance in a project.
 
 HINSTANCE g_hInstance = NULL;
+HANDLE g_hEvent = NULL;
 HHOOK g_mhhk = NULL;
 
 BOOL g_enableRefresh = TRUE;
 BOOL g_enableQuote = TRUE;
+
+PTSTR g_clipText = NULL;
 
 char szIni[_MAX_PATH+2]; // Ini file to save your plugin settings.
 
@@ -44,6 +47,17 @@ bool ends_with(const char* src, const char* val) {
 #endif
 
 	return ((srcLen >= valLen) && (strncmp(src + srcLen - valLen, val, valLen) == 0));
+}
+
+void send_event(WORD type, DWORD eventId, const char* message)
+{
+	if (g_hEvent != NULL) {
+		ReportEvent(g_hEvent, type, 0, eventId, NULL, 1, 0, &message, NULL);
+	} else {
+		if (type == EVENTLOG_ERROR_TYPE) {
+			MessageBox(NULL, message, "BkAutoRefresh", MB_OK || MB_ICONERROR);
+		}
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////
@@ -83,24 +97,63 @@ BOOL CALLBACK SetupProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 ////////////////////////////////////////////////////////////////////////////
 // Hook procs
+VOID CALLBACK CopySendAsyncProc(HWND hwnd, UINT uMsg, ULONG_PTR uData, LRESULT lResult)
+{
+	HGLOBAL hg;
+	PTSTR strClip = NULL, strSel = NULL;
+
+	if (IsClipboardFormatAvailable(CF_TEXT)) {
+		if (OpenClipboard(NULL) && (hg = GetClipboardData(CF_TEXT))) {
+			send_event(EVENTLOG_INFORMATION_TYPE, 2, "clipboard available");
+			strSel = (PTSTR)bka.Alloc(GlobalSize(hg) + 1);
+			strClip = (PTSTR)GlobalLock(hg);
+			lstrcpy(strSel, strClip);
+			GlobalUnlock(hg);
+			CloseClipboard();
+
+			send_event(EVENTLOG_INFORMATION_TYPE, 3, strSel);
+			bka.Free(strSel);
+		}
+	}
+
+	// restore clipboard
+	if (g_clipText != NULL) {
+		if (OpenClipboard(NULL)) {
+			EmptyClipboard();
+
+			hg = GlobalAlloc(GHND | GMEM_SHARE, strlen(g_clipText));
+			strClip = (PTSTR)GlobalLock(hg);
+			lstrcpy(strClip, g_clipText);
+			GlobalUnlock(hg);
+
+			SetClipboardData(CF_TEXT, hg);
+			CloseClipboard();
+		}
+		bka.Free(g_clipText);
+	}
+}
 LRESULT CALLBACK LDoubleClickHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 {
 	MOUSEHOOKSTRUCT *pmh;
 	HGLOBAL hg;
-	PTSTR strText = NULL, strClip = NULL, strSel = NULL;
+	PTSTR strClip = NULL, strSel = NULL;
+	LRESULT ret = NULL;
 
 	pmh = (MOUSEHOOKSTRUCT *)lParam;
 
+	ret = CallNextHookEx(g_mhhk, nCode, wParam, lParam);
 	if (nCode == HC_ACTION && wParam == WM_LBUTTONDBLCLK) {
 		char buf[256];
 		GetClassName(pmh->hwnd, buf, sizeof(buf));
 		if (strcmp(buf, "DanaEditWindowClass") == 0) {
 			// backup clipboard
+			send_event(EVENTLOG_INFORMATION_TYPE, 1, "Double clicked");
+			Sleep(100);
 			if (IsClipboardFormatAvailable(CF_TEXT)) {
 				if (OpenClipboard(NULL) && (hg = GetClipboardData(CF_TEXT))) {
-					strText = (PTSTR)bka.Alloc(GlobalSize(hg));
+					g_clipText = (PTSTR)bka.Alloc(GlobalSize(hg) + 1);
 					strClip = (PTSTR)GlobalLock(hg);
-					lstrcpy(strText, strClip);
+					lstrcpy(g_clipText, strClip);
 
 					GlobalUnlock(hg);
 					EmptyClipboard();
@@ -108,39 +161,11 @@ LRESULT CALLBACK LDoubleClickHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 				}
 			}
 
-			PostMessage(pmh->hwnd, WM_COMMAND, 57634, NULL); //0x0000E122
-			if (IsClipboardFormatAvailable(CF_TEXT)) {
-				if (OpenClipboard(NULL) && (hg = GetClipboardData(CF_TEXT))) {
-					strSel = (PTSTR)bka.Alloc(GlobalSize(hg));
-					strClip = (PTSTR)GlobalLock(hg);
-					lstrcpy(strSel, strClip);
-					GlobalUnlock(hg);
-					CloseClipboard();
-
-					MessageBox(pmh->hwnd, strSel, "BkAutoRefresh", MB_OK);
-					bka.Free(strSel);
-				}
-			}
-
-			// restore clipboard
-			if (strText != NULL) {
-				if (OpenClipboard(NULL)) {
-					EmptyClipboard();
-
-					hg = GlobalAlloc(GHND | GMEM_SHARE, strlen(strText));
-					strClip = (PTSTR)GlobalLock(hg);
-					lstrcpy(strClip, strText);
-					GlobalUnlock(hg);
-
-					SetClipboardData(CF_TEXT, hg);
-					CloseClipboard();
-				}
-				bka.Free(strText);
-			}
+			SendMessageCallback(pmh->hwnd, WM_COMMAND, 57634, NULL, CopySendAsyncProc, NULL);
 		}
 	}
 
-	return CallNextHookEx(g_mhhk, nCode, wParam, lParam);
+	return ret;
 }
 void EnableHook()
 {
@@ -155,6 +180,7 @@ void DisableHook()
 {
 	if (g_mhhk != NULL) {
 		UnhookWindowsHookEx(g_mhhk);
+		g_mhhk = NULL;
 	}
 }
 
@@ -173,6 +199,10 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 				if (!bka.InitAPI()) {
 					return FALSE;
 				}
+				g_hEvent = RegisterEventSource(NULL, "BkAutoRefresh");
+				if (g_hEvent == NULL) {
+					MessageBox(NULL, "Cannot open Event Handle!", "BkAutoRefresh", MB_OK);
+				}
 				GetModuleFileName((HINSTANCE)hModule, szIni, _MAX_PATH);
 				LPSTR lpExt = strrchr(szIni, '.');
 				if (lpExt) {
@@ -190,6 +220,11 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 		case DLL_THREAD_DETACH:
 			break;
 		case DLL_PROCESS_DETACH:
+			{
+				if (g_hEvent != NULL) {
+					DeregisterEventSource(g_hEvent);
+				}
+			}
 			break;
 	}
 	return TRUE;
