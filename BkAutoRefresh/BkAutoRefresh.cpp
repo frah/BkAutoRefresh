@@ -101,6 +101,8 @@ DWORD WINAPI DoubleClickOperateThread(LPVOID lpParam)
 {
 	HGLOBAL hg;
 	PTSTR strClip = NULL, strSel = NULL;
+	BREGEXP *rxp = NULL;
+	char msg[BREGEXP_MAX_ERROR_MESSAGE_LEN];
 
 	Sleep(500);
 	SendMessage((HWND)lpParam, WM_COMMAND, BK_COMMAND_COPY, NULL);
@@ -114,7 +116,13 @@ DWORD WINAPI DoubleClickOperateThread(LPVOID lpParam)
 			GlobalUnlock(hg);
 			CloseClipboard();
 
+			// pattern matching
 			send_event(EVENTLOG_INFORMATION_TYPE, 3, strSel);
+			if (BMatch("/[0-9]+/", strSel, strSel + strlen(strSel), &rxp, msg) > 0) {
+				MessageBox(NULL, rxp->startp[0], PLUGIN_NAME, MB_OK);
+			}
+			if (rxp) BRegfree(rxp);
+
 			bka.Free(strSel);
 		}
 	}
