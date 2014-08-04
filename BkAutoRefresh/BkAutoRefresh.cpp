@@ -18,6 +18,7 @@ HHOOK g_mhhk = NULL;
 
 BOOL g_enableRefresh = TRUE;
 BOOL g_enableQuote = TRUE;
+BOOL g_enableHook = TRUE;
 DCLICK_ACTION* g_dclickActions[MAX_DCLICK_ACTION_NUM] = {};
 int g_dclickActionNum = 0;
 
@@ -236,6 +237,7 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 				}
 				g_enableRefresh = GetPrivateProfileInt("Settings", "EnableRefresh", TRUE, szIni);
 				g_enableQuote = GetPrivateProfileInt("Settings", "EnableQuote", TRUE, szIni);
+				g_enableHook = GetPrivateProfileInt("Settings", "EnableHook", TRUE, szIni);
 				for (i = 1; i <= MAX_DCLICK_ACTION_NUM; i++) {
 					sprintf_s(keyNameBuf, sizeof(keyNameBuf), "Pattern%d", i);
 					GetPrivateProfileString("DoubleClickActions", keyNameBuf, "", profBuf, sizeof(profBuf), szIni);
@@ -292,7 +294,7 @@ int WINAPI BKC_OnStart()
 	prior to any other callback.
 	*/
 
-	EnableHook();
+	if (g_enableHook) EnableHook();
 
 	// Always return 0.
 	return 0;
