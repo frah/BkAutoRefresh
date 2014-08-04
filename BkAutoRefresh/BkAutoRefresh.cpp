@@ -18,6 +18,8 @@ HHOOK g_mhhk = NULL;
 
 BOOL g_enableRefresh = TRUE;
 BOOL g_enableQuote = TRUE;
+DCLICK_ACTION* g_dclickActions[MAX_DCLICK_ACTION_NUM] = {};
+int g_dclickActionNum = 0;
 
 PTSTR g_clipText = NULL;
 
@@ -103,6 +105,7 @@ DWORD WINAPI DoubleClickOperateThread(LPVOID lpParam)
 	PTSTR strClip = NULL, strSel = NULL;
 	BREGEXP *rxp = NULL;
 	char msg[BREGEXP_MAX_ERROR_MESSAGE_LEN];
+	int i;
 
 	Sleep(500);
 	SendMessage((HWND)lpParam, WM_COMMAND, BK_COMMAND_COPY, NULL);
@@ -118,8 +121,14 @@ DWORD WINAPI DoubleClickOperateThread(LPVOID lpParam)
 
 			// pattern matching
 			send_event(EVENTLOG_INFORMATION_TYPE, 3, strSel);
-			if (BMatch("/[0-9]+/", strSel, strSel + strlen(strSel), &rxp, msg) > 0) {
-				MessageBox(NULL, rxp->startp[0], PLUGIN_NAME, MB_OK);
+			if (g_dclickActions != NULL) {
+				for (i = 0; i < g_dclickActionNum; i++) {
+					if (BMatch(g_dclickActions[i]->regexp, strSel, strSel + strlen(strSel), &rxp, msg) > 0) {
+						char buf[512];
+						sprintf_s(buf, sizeof(buf), "Pattern%d matched.\nRegxp: [%s]\nCommand: [%s]\n", i, g_dclickActions[i]->regexp, g_dclickActions[i]->command);
+						MessageBox(NULL, buf, PLUGIN_NAME, MB_OK);
+					}
+				}
 			}
 			if (rxp) BRegfree(rxp);
 
@@ -203,6 +212,8 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 					   LPVOID lpReserved
 					 )
 {
+	int i = 0;
+	char keyNameBuf[50], profBuf[256];
 	g_hInstance = (HINSTANCE)hModule;
 	switch (ul_reason_for_call)
 	{
@@ -225,6 +236,22 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 				}
 				g_enableRefresh = GetPrivateProfileInt("Settings", "EnableRefresh", TRUE, szIni);
 				g_enableQuote = GetPrivateProfileInt("Settings", "EnableQuote", TRUE, szIni);
+				for (i = 1; i <= MAX_DCLICK_ACTION_NUM; i++) {
+					sprintf_s(keyNameBuf, sizeof(keyNameBuf), "Pattern%d", i);
+					GetPrivateProfileString("DoubleClickActions", keyNameBuf, "", profBuf, sizeof(profBuf), szIni);
+					if (strcmp(profBuf, "") == 0) break;
+
+					DCLICK_ACTION* da = (DCLICK_ACTION *)malloc(sizeof(DCLICK_ACTION));
+					da->regexp = (char*)malloc(strlen(profBuf)+1);
+					strcpy_s(da->regexp, strlen(profBuf)+1, profBuf);
+
+					sprintf_s(keyNameBuf, sizeof(keyNameBuf), "Command%d", i);
+					GetPrivateProfileString("DoubleClickActions", keyNameBuf, "", profBuf, sizeof(profBuf), szIni);
+					da->command = (char*)malloc(strlen(profBuf)+1);
+					strcpy_s(da->command, strlen(profBuf)+1, profBuf);
+
+					g_dclickActions[g_dclickActionNum++] = da;
+				}
 			}
 			break;
 		case DLL_THREAD_ATTACH:
@@ -235,6 +262,11 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 			{
 				if (g_hEvent != NULL) {
 					DeregisterEventSource(g_hEvent);
+				}
+				for (i = 0; i < g_dclickActionNum; i++) {
+					free(g_dclickActions[i]->regexp);
+					free(g_dclickActions[i]->command);
+					free(g_dclickActions[i]);
 				}
 			}
 			break;
