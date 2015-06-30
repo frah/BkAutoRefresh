@@ -13,6 +13,8 @@ HINSTANCE g_hInstance = NULL;
 
 BOOL g_enableRefresh = TRUE;
 BOOL g_enableQuote = TRUE;
+char** g_ignoreAddress = NULL;
+int g_ignoreAddressNum = 0;
 
 char szIni[_MAX_PATH+2]; // Ini file to save your plugin settings.
 
@@ -51,12 +53,27 @@ BOOL CALLBACK SetupProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		if (LOWORD(wParam) == IDOK) {
 			g_enableRefresh = ((SendDlgItemMessage(hWnd, IDC_CHK_REFRESH, BM_GETCHECK, 0, 0) == BST_CHECKED)? TRUE:FALSE);
 			g_enableQuote = ((SendDlgItemMessage(hWnd, IDC_CHK_QUOTE, BM_GETCHECK, 0, 0) == BST_CHECKED)? TRUE:FALSE);
+			GetDlgItemText(hWnd, IDC_IGNORE_ADDR1, g_ignoreAddress[0], RFC5321_ADDRESS_MAX_LENGTH);
+			GetDlgItemText(hWnd, IDC_IGNORE_ADDR2, g_ignoreAddress[1], RFC5321_ADDRESS_MAX_LENGTH);
+			GetDlgItemText(hWnd, IDC_IGNORE_ADDR3, g_ignoreAddress[2], RFC5321_ADDRESS_MAX_LENGTH);
+			GetDlgItemText(hWnd, IDC_IGNORE_ADDR4, g_ignoreAddress[3], RFC5321_ADDRESS_MAX_LENGTH);
+			GetDlgItemText(hWnd, IDC_IGNORE_ADDR5, g_ignoreAddress[4], RFC5321_ADDRESS_MAX_LENGTH);
 
 			char szVal[60];
 			sprintf(szVal, "%d", g_enableRefresh);
 			WritePrivateProfileString("Settings", "EnableRefresh", szVal, szIni);
 			sprintf(szVal, "%d", g_enableQuote);
 			WritePrivateProfileString("Settings", "EnableQuote", szVal, szIni);
+			sprintf(szVal, "%d", g_ignoreAddressNum);
+			WritePrivateProfileString("IgnoreAddresses", "IgnoreAddressNum", szVal, szIni);
+			if (g_ignoreAddressNum > 0) {
+				char keyName[10];
+				for (int i = 0; i < g_ignoreAddressNum; i++) {
+					sprintf_s(keyName, sizeof(keyName), "Address%02d", i);
+					WritePrivateProfileString("IgnoreAddresses", keyName, g_ignoreAddress[i], szIni);
+				}
+			}
+
 			EndDialog(hWnd, IDOK);
 			return TRUE;
 		} else
@@ -69,6 +86,11 @@ BOOL CALLBACK SetupProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	case WM_INITDIALOG:
 		SendDlgItemMessage(hWnd, IDC_CHK_REFRESH, BM_SETCHECK, g_enableRefresh, 0);
 		SendDlgItemMessage(hWnd, IDC_CHK_QUOTE, BM_SETCHECK, g_enableQuote, 0);
+		SetDlgItemText(hWnd, IDC_IGNORE_ADDR1, g_ignoreAddress[0]);
+		SetDlgItemText(hWnd, IDC_IGNORE_ADDR2, g_ignoreAddress[1]);
+		SetDlgItemText(hWnd, IDC_IGNORE_ADDR3, g_ignoreAddress[2]);
+		SetDlgItemText(hWnd, IDC_IGNORE_ADDR4, g_ignoreAddress[3]);
+		SetDlgItemText(hWnd, IDC_IGNORE_ADDR5, g_ignoreAddress[4]);
 		return TRUE;
 
 	default:
@@ -103,6 +125,25 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 				}
 				g_enableRefresh = GetPrivateProfileInt("Settings", "EnableRefresh", TRUE, szIni);
 				g_enableQuote = GetPrivateProfileInt("Settings", "EnableQuote", TRUE, szIni);
+
+				g_ignoreAddressNum = GetPrivateProfileInt("IgnoreAddresses", "IgnoreAddressNum", 0, szIni);
+				g_ignoreAddressNum = (g_ignoreAddressNum >= 5) ? g_ignoreAddressNum : 5;
+				if (g_ignoreAddressNum > 0) {
+					char keyName[10];
+					g_ignoreAddress = (char**)bka.Alloc(sizeof(char*) * g_ignoreAddressNum);
+					for (int i = 0; i < g_ignoreAddressNum; i++) {
+						sprintf_s(keyName, sizeof(keyName), "Address%02d", i);
+						g_ignoreAddress[i] = (char*)bka.Alloc(sizeof(char) * RFC5321_ADDRESS_MAX_LENGTH);
+						GetPrivateProfileString("IgnoreAddresses", keyName, "", g_ignoreAddress[i], RFC5321_ADDRESS_MAX_LENGTH, szIni);
+					}
+				}
+#ifdef _DEBUG
+				char buf[2048];
+				sprintf_s(buf, sizeof(buf),
+					"Settings Loaded\n[Settings]\nEnableRefresh: %d\nEnableQuote: %d\n\n[IgnoreAddresses]\nNum: %d\nAddr1: %s\nAddr2: %s\nAddr3: %s\nAddr4: %s\nAddr5: %s",
+					g_enableRefresh, g_enableQuote, g_ignoreAddressNum, g_ignoreAddress[0], g_ignoreAddress[1], g_ignoreAddress[2], g_ignoreAddress[3], g_ignoreAddress[4]);
+				MessageBox(NULL, buf, "BkAutoRefresh", MB_OK);
+#endif
 			}
 			break;
 		case DLL_THREAD_ATTACH:
@@ -110,6 +151,14 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 		case DLL_THREAD_DETACH:
 			break;
 		case DLL_PROCESS_DETACH:
+			{
+				if (g_ignoreAddressNum > 0) {
+					for (int i = 0; i < g_ignoreAddressNum; i++) {
+						bka.Free(g_ignoreAddress[i]);
+					}
+					bka.Free(g_ignoreAddress);
+				}
+			}
 			break;
 	}
 	return TRUE;
@@ -224,7 +273,7 @@ int WINAPI BKC_OnEveryMinute()
 int WINAPI BKC_OnOpenCompose(HWND hWnd, int nMode/* See COMPOSE_MODE_* in BeckyApi.h */)
 {
 	LPSTR text, newTxt;
-	char mimeType[80], *ctx, *line;
+	char mimeType[80], *ctx, *line, headerBuf[256];
 	int textLen, ntextLen;
 	bool snipFlag = false;
 	const char *newLine = "\r\n";
@@ -235,6 +284,16 @@ int WINAPI BKC_OnOpenCompose(HWND hWnd, int nMode/* See COMPOSE_MODE_* in BeckyA
 	if ((nMode == COMPOSE_MODE_REPLY1) ||
 		(nMode == COMPOSE_MODE_REPLY2) ||
 		(nMode == COMPOSE_MODE_REPLY3)) {
+			// Check ignore address list
+			if (g_ignoreAddressNum > 0) {
+				bka.CompGetSpecifiedHeader(hWnd, "To", headerBuf, sizeof(headerBuf));
+				for (int i = 0; i < g_ignoreAddressNum; i++) {
+					if (strstr(headerBuf, g_ignoreAddress[i]) == NULL) {
+						return 0;
+					}
+				}
+			}
+
 			text = bka.CompGetText(hWnd, mimeType, sizeof(mimeType));
 #ifdef _DEBUG
 			MessageBox(hWnd, text, "BkAutoRefresh", MB_OK);
@@ -375,7 +434,7 @@ int WINAPI BKC_OnPlugInInfo(LPBKPLUGININFO lpPlugInInfo)
 	strcpy(lpPlugInInfo->szPlugInName, buf);
 	LoadString(g_hInstance, IDS_BAR_VENDOR, buf, sizeof(buf));
 	strcpy(lpPlugInInfo->szVendor, buf);
-	strcpy(lpPlugInInfo->szVersion, "2.1");
+	strcpy(lpPlugInInfo->szVersion, "2.2");
 	LoadString(g_hInstance, IDS_BAR_DESC, buf, sizeof(buf));
 	strcpy(lpPlugInInfo->szDescription, buf);
 	
