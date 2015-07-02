@@ -115,14 +115,11 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 				if (!bka.InitAPI()) {
 					return FALSE;
 				}
-				GetModuleFileName((HINSTANCE)hModule, szIni, _MAX_PATH);
-				LPSTR lpExt = strrchr(szIni, '.');
-				if (lpExt) {
-					strcpy(lpExt, ".ini");
-				} else {
-					// just in case
-					strcat(szIni, ".ini");
-				}
+
+				LPCSTR bDataFolder = bka.GetDataFolder();
+				strcpy_s(szIni, _MAX_PATH, bDataFolder);
+				strcat_s(szIni, _MAX_PATH, BKAUTOREFRESH_INI_FILENAME);
+
 				g_enableRefresh = GetPrivateProfileInt("Settings", "EnableRefresh", TRUE, szIni);
 				g_enableQuote = GetPrivateProfileInt("Settings", "EnableQuote", TRUE, szIni);
 
