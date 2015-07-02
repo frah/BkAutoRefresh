@@ -130,10 +130,10 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 				g_ignoreAddressNum = (g_ignoreAddressNum >= 5) ? g_ignoreAddressNum : 5;
 				if (g_ignoreAddressNum > 0) {
 					char keyName[10];
-					g_ignoreAddress = (char**)bka.Alloc(sizeof(char*) * g_ignoreAddressNum);
+					g_ignoreAddress = (char**)malloc(sizeof(char*) * g_ignoreAddressNum);
 					for (int i = 0; i < g_ignoreAddressNum; i++) {
 						sprintf_s(keyName, sizeof(keyName), "Address%02d", i);
-						g_ignoreAddress[i] = (char*)bka.Alloc(sizeof(char) * RFC5321_ADDRESS_MAX_LENGTH);
+						g_ignoreAddress[i] = (char*)malloc(sizeof(char) * RFC5321_ADDRESS_MAX_LENGTH);
 						GetPrivateProfileString("IgnoreAddresses", keyName, "", g_ignoreAddress[i], RFC5321_ADDRESS_MAX_LENGTH, szIni);
 					}
 				}
@@ -154,9 +154,9 @@ BOOL APIENTRY DllMain( HANDLE hModule,
 			{
 				if (g_ignoreAddressNum > 0) {
 					for (int i = 0; i < g_ignoreAddressNum; i++) {
-						bka.Free(g_ignoreAddress[i]);
+						free(g_ignoreAddress[i]);
 					}
-					bka.Free(g_ignoreAddress);
+					free(g_ignoreAddress);
 				}
 			}
 			break;
@@ -288,7 +288,7 @@ int WINAPI BKC_OnOpenCompose(HWND hWnd, int nMode/* See COMPOSE_MODE_* in BeckyA
 			if (g_ignoreAddressNum > 0) {
 				bka.CompGetSpecifiedHeader(hWnd, "To", headerBuf, sizeof(headerBuf));
 				for (int i = 0; i < g_ignoreAddressNum; i++) {
-					if (strstr(headerBuf, g_ignoreAddress[i]) == NULL) {
+					if (strcmp(g_ignoreAddress[i], "") != 0 && strstr(headerBuf, g_ignoreAddress[i]) != NULL) {
 						return 0;
 					}
 				}
